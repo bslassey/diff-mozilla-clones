@@ -72,10 +72,10 @@ html_out =\
 \
 "<html><head><title>Diff Between" + srcdir_1 + " and " + srcdir_2 + "</title><style>"\
 "#container {width: 100%; display: table;}"\
-"#row { display: table-row;}"\
-"#bugnum { width: 15%; display: table-cell;}"\
-"#owner { width: 25%; display: table-cell;}"\
-"#summary { width: 60%; display: table-cell;}"\
+".row { display: table-row;}"\
+".bugnum { width: 15%; display: table-cell;}"\
+".owner { width: 25%; display: table-cell;}"\
+".summary { width: 60%; display: table-cell;}"\
 "</style>\n" \
 "<script>\n" \
 "function openAllBugs() {\n" \
@@ -97,13 +97,13 @@ for index in enumerate(bugs_that_have_not_landed):
     info = getBugInfo(index[1])
     if info is None:
         continue
-    html_out += "<div id=\"row\" "
+    html_out += "<div class=\"row\" "
     if info[2] is "true":
         html_out += "style=\"text-decoration: line-through;\""
     html_out += ">\n"
-    html_out += "\t<span id=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?id=" + index[1] + "\">" + index[1] + "</a></span>"
-    html_out += "<span id=\"owner\">" + info[0] + "</span>"
-    html_out += "<span id=\"summary\">" + info[1] + "</span>\n"
+    html_out += "\t<span class=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?class=" + index[1] + "\">" + index[1] + "</a></span>"
+    html_out += "<span class=\"owner\">" + info[0] + "</span>"
+    html_out += "<span class=\"summary\">" + info[1] + "</span>\n"
     html_out += "</div>\n"
 
 html_out += "</div></body></html>"
