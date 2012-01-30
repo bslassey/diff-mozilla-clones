@@ -29,7 +29,7 @@ def getBugInfo(bug):
             return None
         try:
             if "not-fennec-11" in result['whiteboard']:
-                not11 = "true"
+                return None
         except KeyError:
             not11 = "false"
         return result['assigned_to']['real_name'], result['summary'], not11
