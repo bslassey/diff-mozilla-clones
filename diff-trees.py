@@ -3,18 +3,18 @@ from subprocess import Popen, PIPE
 import urllib2
 import simplejson
 import re
+import math
 from datetime import datetime
+import os
 
-srcdir_1 = "./mozilla-central"
-srcdir_2 = "./mozilla-aurora"
-directory_of_interest_1a = "mobile/android"
-directory_of_interest_2a = "mobile/android"
-directory_of_interest_1b = "widget/src/android"
-directory_of_interest_2b = "widget/android"
-aurora_merge_date = datetime.strptime("2011-12-21", "%Y-%m-%d");
+srcdir_1 = "./mozilla-aurora"
+srcdir_2 = "./mozilla-beta"
+directories_of_interest = "mobile/android widget/src/android widget/android"
+aurora_merge_date_str = "2011-12-21"
+aurora_merge_date = datetime.strptime(aurora_merge_date_str, "%Y-%m-%d");
 
-srcdir_1_hash = {}
-srcdir_2_hash = {}
+landedBugs = {}
+unlandedBugs = []
 
 def getBugInfo(bug):
     try:
@@ -36,37 +36,49 @@ def getBugInfo(bug):
     except urllib2.HTTPError:
         return "Stuart", "I do not have a pony. See bug " + bug, "true"
 
-def populateHash(srcdir, hashtable, dir_to_diff):
-    cmd = "hg log " + dir_to_diff
+def getLandedBugs(srcdir, dirs_to_diff):
+    cmd = "hg log -d \">" + aurora_merge_date_str + "\" --template '{desc|firstline}\n' " + dirs_to_diff
     p = Popen(cmd, cwd=srcdir, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p.communicate()
+    lines = stdout.splitlines()
+    for line in lines:
+        try: # if the bugNum isn't a number it'll throw
+            bugNum = int(line[4:10], 10)
+            print "bug number: " + str(bugNum)
+            landedBugs[bugNum] = True
+        except ValueError:
+            print "not a bug: " + line
+            
 
-    matches = re.findall(r'(summary:\s+.Bug )(\d+)', stdout)
-    for match in matches:
-        # do something with each found email string
-        hashtable[match[1]] = '1'
+def getUnlandedBugs(srcdir, dirs_to_diff):
+    cmd = "hg log -d \">" + aurora_merge_date_str + "\" --template '{rev}\t{desc|firstline}\n' " + dirs_to_diff
+    p = Popen(cmd, cwd=srcdir, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = p.communicate()
+    lines = stdout.splitlines()
+    for line in lines:
+        tmp = line.partition('\t')
+        rev = tmp[0]
+        summary = tmp[2]
+        try: # if the bugNum isn't a number it'll throw
+            bugNum = int(summary[4:10], 10)
+            print "bug num: " + str(bugNum)
+            if landedBugs.has_key(bugNum):
+                tup = rev, bugNum, rev
+                unlandedBugs.append(tup)
+        except ValueError:
+            print "not a bug: " + summary
 
 print "updating source directories:"
 subprocess.call(["hg", "pull", "-u"], cwd=srcdir_1)
 subprocess.call(["hg", "pull", "-u"], cwd=srcdir_2)
 
 print "collecting data about " + srcdir_1
-populateHash(srcdir_1, srcdir_1_hash, directory_of_interest_1a)
-populateHash(srcdir_1, srcdir_1_hash, directory_of_interest_1b)
+getLandedBugs(srcdir_1, directories_of_interest)
 
 print "collecting data about " + srcdir_2
-populateHash(srcdir_2, srcdir_2_hash, directory_of_interest_2a)
-populateHash(srcdir_2, srcdir_2_hash, directory_of_interest_2b)
+getUnlandedBugs(srcdir_2, directories_of_interest)
 
-print "checking to see what hasn't landed in " + srcdir_2 
-
-bugs_that_have_not_landed = [];
-for index in enumerate(srcdir_1_hash):
-    #check to see if it is also in srcdir_2_hash, if not print it.
-    if (srcdir_2_hash.has_key(index[1]) == False):
-        bugs_that_have_not_landed.append(index[1])
-
-
+print str(len(unlandedBugs)) + "havent' landed in " + srcdir_2
 
 html_out =\
 \
@@ -93,24 +105,43 @@ html_out =\
 "<h1>Diff Between" + srcdir_1 + " and " + srcdir_2 + "</h1>"\
 "<div id=\"container\">\n" \
 "<button onClick=\"openAllBugs()\">Open All Bugs</button>\n"
-for index in enumerate(bugs_that_have_not_landed):
-    info = getBugInfo(index[1])
-    if info is None:
-        continue
-    html_out += "<div class=\"row\" "
-    if info[2] is "true":
-        html_out += "style=\"text-decoration: line-through;\""
-    html_out += ">\n"
-    html_out += "\t<span class=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?class=" + index[1] + "\">" + index[1] + "</a></span>"
-    html_out += "<span class=\"owner\">" + info[0] + "</span>"
-    html_out += "<span class=\"summary\">" + info[1] + "</span>\n"
-    html_out += "</div>\n"
+written_out_bugs = {}
+unlandedBugs.sort()
+try:
+    os.mkdir("patches")
+except OSError:
+    print "patches dir exists"
+series_file = open("./patches/series", "w")
+for index in unlandedBugs:
+    print index
+    bugNum = index[1]
+    rev = index[0]
+    if not written_out_bugs.has_key(bugNum):
+        written_out_bugs[bugNum] = True
+        print "bug number: " + str(bugNum) + " rev: " + rev
+        info = getBugInfo(str(bugNum))
+        if info is None:
+            continue
+        html_out += "<div class=\"row\" "
+        if info[2] is "true":
+            html_out += "style=\"text-decoration: line-through;\""
+        html_out += ">\n"
+        html_out += "\t<span class=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?class=" + str(bugNum) + "\">" + str(bugNum) + "</a></span>"
+        html_out += "<span class=\"owner\">" + info[0] + "</span>"
+        html_out += "<span class=\"summary\">" + info[1] + "</span>\n"
+        html_out += "</div>\n"
+    patch_file = open("patches/" + rev, "w")
+    cmd = "hg export " + rev
+    p = Popen(cmd, cwd=srcdir_1, shell=True, stdin=PIPE, stdout=patch_file, stderr=PIPE)
+    p.communicate()
+    patch_file.close()
+    series_file.write(rev + "# bug " + str(bugNum) + "\n")
+
 
 html_out += "</div></body></html>"
 
 
 fout = open("data.html", "w")
 fout.write(html_out.encode('UTF-8'))
-
-
-
+fout.close()
+series_file.close()
