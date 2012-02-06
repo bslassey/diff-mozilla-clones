@@ -18,9 +18,9 @@ unlandedBugs = []
 
 def getBugInfo(bug):
     try:
-        req = urllib2.Request("https://api-dev.bugzilla.mozilla.org/latest/bug/" + bug,
-                              None,
-                              {'user-agent':'dougt/rocks', 'Content-Type': 'application/json'})
+        spec = "https://api-dev.bugzilla.mozilla.org/latest/bug/" + bug
+        print "Getting: " + spec
+        req = urllib2.Request(spec, None, {'user-agent':'dougt/rocks', 'Content-Type': 'application/json'})
         opener = urllib2.build_opener()
         f = opener.open(req)
         result = simplejson.load(f)
@@ -51,34 +51,38 @@ def getLandedBugs(srcdir, dirs_to_diff):
             
 
 def getUnlandedBugs(srcdir, dirs_to_diff):
-    cmd = "hg log -d \">" + aurora_merge_date_str + "\" --template '{rev}\t{desc|firstline}\n' " + dirs_to_diff
+    cmd = "hg log -d \">" + aurora_merge_date_str + "\" --template '{rev}\t{node|short}\t{author}\t{desc|firstline}\n' " + dirs_to_diff
     p = Popen(cmd, cwd=srcdir, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p.communicate()
     lines = stdout.splitlines()
     for line in lines:
         tmp = line.partition('\t')
         rev = tmp[0]
-        summary = tmp[2]
+        remander = tmp[2].partition('\t')
+        changeset = remander[0]
+        remander2 = remander[2].partition('\t')
+        author = remander2[0]
+        summary = remander2[2]
         try: # if the bugNum isn't a number it'll throw
             bugNum = int(summary[4:10], 10)
             print "bug num: " + str(bugNum)
-            if landedBugs.has_key(bugNum):
-                tup = rev, bugNum, rev
+            if not landedBugs.has_key(bugNum):
+                tup = rev, bugNum, changeset, author, summary
                 unlandedBugs.append(tup)
         except ValueError:
             print "not a bug: " + summary
 
 print "updating source directories:"
-subprocess.call(["hg", "pull", "-u"], cwd=srcdir_1)
 subprocess.call(["hg", "pull", "-u"], cwd=srcdir_2)
-
-print "collecting data about " + srcdir_1
-getLandedBugs(srcdir_1, directories_of_interest)
+subprocess.call(["hg", "pull", "-u"], cwd=srcdir_1)
 
 print "collecting data about " + srcdir_2
-getUnlandedBugs(srcdir_2, directories_of_interest)
+getLandedBugs(srcdir_2, directories_of_interest)
 
-print str(len(unlandedBugs)) + "havent' landed in " + srcdir_2
+print "collecting data about " + srcdir_1
+getUnlandedBugs(srcdir_1, directories_of_interest)
+
+print str(len(unlandedBugs)) + " havent' landed in " + srcdir_2
 
 html_out =\
 \
@@ -116,26 +120,34 @@ for index in unlandedBugs:
     print index
     bugNum = index[1]
     rev = index[0]
+    changeset = index[2]
+    author = index[3]
+    summary = index[4]
+    not11 = False
     if not written_out_bugs.has_key(bugNum):
         written_out_bugs[bugNum] = True
         print "bug number: " + str(bugNum) + " rev: " + rev
-        info = getBugInfo(str(bugNum))
-        if info is None:
-            continue
+        #info = getBugInfo(str(bugNum))
+        #if info is None:
+        #    continue
         html_out += "<div class=\"row\" "
-        if info[2] is "true":
+        if not11:
             html_out += "style=\"text-decoration: line-through;\""
         html_out += ">\n"
         html_out += "\t<span class=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?id=" + str(bugNum) + "\">" + str(bugNum) + "</a></span>"
-        html_out += "<span class=\"owner\">" + info[0] + "</span>"
-        html_out += "<span class=\"summary\">" + info[1] + "</span>\n"
+        html_out += "<span class=\"owner\">" + author + "</span>"
+        html_out += "<span class=\"summary\">" + summary + "</span>\n"
         html_out += "</div>\n"
-    patch_file = open("patches/" + rev, "w")
-    cmd = "hg export " + rev
+    print "creating changeset file"
+    patch_file = open("patches/" + changeset, "w")
+    print "exporting changeset"
+    cmd = "hg export " + changeset
     p = Popen(cmd, cwd=srcdir_1, shell=True, stdin=PIPE, stdout=patch_file, stderr=PIPE)
     p.communicate()
+    print "closing changeset file"
     patch_file.close()
-    series_file.write(rev + "# bug " + str(bugNum) + "\n")
+    print "writing series file"
+    series_file.write(changeset + " # rev: " + rev + " bug " + str(bugNum) + " " + author + " " + summary +"\n")
 
 
 html_out += "</div></body></html>"
