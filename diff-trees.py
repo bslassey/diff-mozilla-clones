@@ -126,7 +126,7 @@ for index in unlandedBugs:
         if info[2] is "true":
             html_out += "style=\"text-decoration: line-through;\""
         html_out += ">\n"
-        html_out += "\t<span class=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?class=" + str(bugNum) + "\">" + str(bugNum) + "</a></span>"
+        html_out += "\t<span class=\"bugnum\"> <a href=\"https://bugzilla.mozilla.org/show_bug.cgi?id=" + str(bugNum) + "\">" + str(bugNum) + "</a></span>"
         html_out += "<span class=\"owner\">" + info[0] + "</span>"
         html_out += "<span class=\"summary\">" + info[1] + "</span>\n"
         html_out += "</div>\n"
